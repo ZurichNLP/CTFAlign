@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ctfalign"
+version = "0.1.0"
+description = "CTFAlign and MDPAlign: document-level word alignment from multilingual token embeddings"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Michelle Wastl" }]
+keywords = ["word-alignment", "multilingual", "embeddings", "nlp", "documents"]
+dependencies = [
+    "numpy",
+    "torch",
+    "transformers",
+]
+
+[project.optional-dependencies]
+# Everything needed to run the test suite.
+dev = ["pytest", "pandas"]
+
+[project.scripts]
+ctfalign = "ctfalign.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/miwytt/doc-wordalign"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ctfalign"]
+
+# The sdist keeps test_smoke.py (runs anywhere, no data or downloads) but drops
+# the golden-test machinery: it needs the research repo's multi-GB similarity
+# matrices, which are not distributed, so it can only skip for anyone else --
+# and its fixture alone is ~95% of the archive.
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "tests/fixtures",
+    "tests/test_golden.py",
+    "tests/_make_golden_fixture.py",
+    ".claude",
+    "CLAUDE.md",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: equivalence tests over real research data (deselect with '-m \"not slow\"')",
+]

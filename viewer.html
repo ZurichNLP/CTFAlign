@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTFAlign · Alignment Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f6f7f9; --panel:#ffffff; --border:#e9ebf0;
+    --text:#2a2f3a; --muted:#9aa1b1;
+    --hl:#6366f1; --hl-strong:#4f46e5; --hl-soft:rgba(99,102,241,.10);
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.05);
+  }
+  * { box-sizing:border-box; }
+  body { font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         margin:0; color:var(--text); background:var(--bg); -webkit-font-smoothing:antialiased; }
+  header { padding:16px 28px; background:rgba(255,255,255,.8); backdrop-filter:saturate(180%) blur(8px);
+           border-bottom:1px solid var(--border); display:flex; gap:16px; align-items:center;
+           flex-wrap:wrap; position:sticky; top:0; z-index:5; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand .dot { width:10px; height:10px; border-radius:50%;
+                background:linear-gradient(135deg,var(--hl),#22d3ee); box-shadow:0 0 0 4px var(--hl-soft); }
+  header h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:-.01em; }
+  header h1 span { color:var(--muted); font-weight:500; }
+  input[type=file] { font:inherit; font-size:13px; color:var(--muted); }
+  input[type=file]::file-selector-button { font:inherit; font-size:13px; font-weight:550; margin-right:10px;
+        padding:7px 14px; border:1px solid var(--border); border-radius:999px; background:#fff;
+        color:var(--text); cursor:pointer; transition:.15s; }
+  input[type=file]::file-selector-button:hover { background:#f3f4f6; border-color:#d8dbe3; }
+  .controls { display:flex; gap:6px; align-items:center; margin-left:auto; }
+  button { font:inherit; font-size:13px; font-weight:550; padding:7px 14px; border:1px solid var(--border);
+           background:#fff; border-radius:999px; cursor:pointer; color:var(--text); transition:.15s; }
+  button:hover:not(:disabled) { background:#f3f4f6; border-color:#d8dbe3; }
+  button:disabled { opacity:.4; cursor:default; }
+  #counter { min-width:74px; text-align:center; font-variant-numeric:tabular-nums; font-size:13px; color:var(--muted); }
+  .hint { padding:12px 28px 4px; font-size:12.5px; color:var(--muted); }
+  #meta { padding:4px 28px; color:var(--muted); font-size:12.5px; min-height:14px;
+          font-variant-numeric:tabular-nums; }
+  #panels { display:flex; gap:18px; padding:10px 28px 4px; align-items:flex-start; }
+  .panel { flex:1; min-width:0; background:var(--panel); border:1px solid var(--border);
+           border-radius:var(--radius); padding:20px 22px; max-height:72vh; overflow:auto;
+           line-height:2.35; box-shadow:var(--shadow); }
+  .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:600;
+              color:var(--muted); margin:0 0 14px; position:sticky; top:-20px;
+              background:var(--panel); padding:4px 0; }
+  .word { padding:2px 4px; border-radius:6px; cursor:default;
+          transition:background .12s, color .12s, box-shadow .12s; }
+  .word:hover { background:var(--hl-soft); }
+  .word.active, .word.aligned { background:var(--hl); color:#fff; }
+  .word.active { box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--hl); }
+  .word[data-unaligned] { color:#b8bdc9; }
+  #info { padding:14px 28px 32px; font-size:13px; color:#4b5160; min-height:20px; }
+  .empty { padding:64px; text-align:center; color:var(--muted); background:var(--panel);
+           border:1px dashed var(--border); border-radius:var(--radius); width:100%; }
+  code { background:var(--hl-soft); color:var(--hl-strong); padding:2px 6px; border-radius:5px; font-size:.92em; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot"></span>
+    <h1>CTFAlign <span>· Alignment Viewer</span></h1>
+  </div>
+  <input type="file" id="file" accept=".jsonl,.json,.txt">
+  <div class="controls">
+    <button id="prev">‹ Prev</button>
+    <span id="counter">– / –</span>
+    <button id="next">Next ›</button>
+  </div>
+</header>
+<div class="hint">Hover a word to highlight its alignment in the other text · click to pin · ←/→ to flip through samples</div>
+<div id="meta"></div>
+<div id="panels">
+  <div class="empty" id="empty">Drop or choose a JSONL file produced by <code>ctfalign align</code>.</div>
+</div>
+<div id="info"></div>
+
+<script>
+"use strict";
+let samples = [], cur = 0, pinned = null;
+
+const fileInput = document.getElementById('file');
+const panels    = document.getElementById('panels');
+const counter   = document.getElementById('counter');
+const meta      = document.getElementById('meta');
+const info      = document.getElementById('info');
+const prevBtn   = document.getElementById('prev');
+const nextBtn   = document.getElementById('next');
+
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) readFile(f);
+});
+
+// Drag and drop anywhere.
+document.addEventListener('dragover', e => { e.preventDefault(); });
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f) readFile(f);
+});
+
+function readFile(f) {
+  const r = new FileReader();
+  r.onload = () => loadText(r.result);
+  r.readAsText(f);
+}
+
+function loadText(text) {
+  samples = [];
+  let skipped = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    try { samples.push(parseRecord(JSON.parse(t))); }
+    catch (err) { skipped++; }
+  }
+  cur = 0; pinned = null;
+  render();
+  if (skipped) info.textContent = skipped + ' line(s) could not be parsed as JSON.';
+}
+
+function splitWords(s) {
+  s = (s || '').trim();
+  return s ? s.split(/\s+/) : [];
+}
+
+function parseRecord(rec) {
+  const wordsA = splitWords(rec.text_a);
+  const wordsB = splitWords(rec.text_b);
+  let pairs = [];
+  const L = rec.labels;
+  if (typeof L === 'string') {
+    if (L.trim()) pairs = L.trim().split(/\s+/).map(p => p.split('-').map(Number));
+  } else if (Array.isArray(L)) {
+    pairs = L.map(p => [Number(p[0]), Number(p[1])]);
+  }
+  const a2b = {}, b2a = {};
+  for (const [i, j] of pairs) {
+    if (Number.isNaN(i) || Number.isNaN(j)) continue;
+    (a2b[i] = a2b[i] || []).push(j);
+    (b2a[j] = b2a[j] || []).push(i);
+  }
+  return { rec, wordsA, wordsB, a2b, b2a };
+}
+
+function render() {
+  if (!samples.length) {
+    panels.innerHTML = '<div class="empty">No records found in this file.</div>';
+    counter.textContent = '– / –'; meta.textContent = ''; info.textContent = '';
+    prevBtn.disabled = nextBtn.disabled = true;
+    return;
+  }
+  const s = samples[cur];
+  counter.textContent = (cur + 1) + ' / ' + samples.length;
+  prevBtn.disabled = cur <= 0;
+  nextBtn.disabled = cur >= samples.length - 1;
+  const r = s.rec;
+  meta.textContent = [r.doc_id, r.sent_id, r.id, r.system, r.lang]
+    .filter(x => x !== undefined && x !== null && x !== '').join('  ·  ');
+  panels.innerHTML = '';
+  panels.appendChild(buildPanel('a', s));
+  panels.appendChild(buildPanel('b', s));
+  info.textContent = '';
+}
+
+function langLabel(s, side) {
+  const lang = s.rec.lang;            // e.g. "en-fr"
+  if (typeof lang === 'string' && lang.includes('-')) {
+    const parts = lang.split('-');
+    return (side === 'a' ? 'Source' : 'Target') + ' — ' + (side === 'a' ? parts[0] : parts[1]);
+  }
+  return side === 'a' ? 'Text A' : 'Text B';
+}
+
+function buildPanel(side, s) {
+  const div = document.createElement('div');
+  div.className = 'panel';
+  const h = document.createElement('h2');
+  h.textContent = langLabel(s, side);
+  div.appendChild(h);
+
+  const words = side === 'a' ? s.wordsA : s.wordsB;
+  const map   = side === 'a' ? s.a2b   : s.b2a;
+  words.forEach((w, idx) => {
+    const span = document.createElement('span');
+    span.className = 'word';
+    span.textContent = w;
+    span.dataset.side = side;
+    span.dataset.idx = idx;
+    if (!(idx in map)) span.dataset.unaligned = '1';
+    span.addEventListener('mouseenter', () => { if (!pinned) highlight(side, idx); });
+    span.addEventListener('mouseleave', () => { if (!pinned) clearHighlight(); });
+    span.addEventListener('click', () => {
+      if (pinned && pinned.side === side && pinned.idx === idx) {
+        pinned = null; clearHighlight();
+      } else {
+        pinned = { side, idx }; highlight(side, idx);
+      }
+    });
+    div.appendChild(span);
+    div.appendChild(document.createTextNode(' '));
+  });
+  return div;
+}
+
+function wordEl(side, idx) {
+  return panels.querySelector('.word[data-side="' + side + '"][data-idx="' + idx + '"]');
+}
+
+function highlight(side, idx) {
+  clearHighlight();
+  const s = samples[cur];
+  const self = wordEl(side, idx);
+  if (self) self.classList.add('active');
+
+  const map        = side === 'a' ? s.a2b : s.b2a;
+  const otherSide  = side === 'a' ? 'b' : 'a';
+  const otherWords = otherSide === 'a' ? s.wordsA : s.wordsB;
+  const targets    = map[idx] || [];
+
+  targets.forEach(j => { const el = wordEl(otherSide, j); if (el) el.classList.add('aligned'); });
+
+  const srcWord = (side === 'a' ? s.wordsA : s.wordsB)[idx];
+  if (targets.length) {
+    const tw = targets.map(j => j + ' “' + (otherWords[j] ?? '?') + '”').join(', ');
+    info.textContent = (side === 'a' ? 'Source' : 'Target') + ' word ' + idx +
+                       ' “' + srcWord + '”  ↔  ' + tw;
+    const first = wordEl(otherSide, targets[0]);
+    if (first) first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  } else {
+    info.textContent = (side === 'a' ? 'Source' : 'Target') + ' word ' + idx +
+                       ' “' + srcWord + '”  —  no alignment';
+  }
+}
+
+function clearHighlight() {
+  panels.querySelectorAll('.word.active, .word.aligned')
+        .forEach(el => el.classList.remove('active', 'aligned'));
+  if (!pinned) info.textContent = '';
+}
+
+prevBtn.addEventListener('click', () => { if (cur > 0) { cur--; pinned = null; render(); } });
+nextBtn.addEventListener('click', () => { if (cur < samples.length - 1) { cur++; pinned = null; render(); } });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowLeft') prevBtn.click();
+  else if (e.key === 'ArrowRight') nextBtn.click();
+});
+</script>
+</body>
+</html>

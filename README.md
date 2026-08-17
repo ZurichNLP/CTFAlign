@@ -40,18 +40,16 @@ aligner.align("each of them is very complex , but the link between the two is ev
 ```
 
 `method` controls the structural constraint:
-* "ctfalign" applies the coarse-to-fine constraint proposed in our paper.
-* "mdpalign-fuzzy" applies the MDPAlign diagonal prior.
-* "mdpalign-strict" applies a hard diagonal band instead of the fuzzy prior: similarities further than `k` tokens from the diagonal are zeroed rather than downweighted.
-* "simalign" applies no structural constraint and provides the unconstrained SimAlign baseline ([Jalili Sabet et al., 2020](https://aclanthology.org/2020.findings-emnlp.147/)).
+* `"ctfalign"` applies the coarse-to-fine constraint proposed in our paper.
+* `"mdpalign-fuzzy"` applies the MDPAlign diagonal prior.
+* `"mdpalign-strict"` applies a hard diagonal band instead of the fuzzy prior: similarities further than `k` tokens from the diagonal are zeroed rather than downweighted.
+* `"simalign"` applies no structural constraint and provides the unconstrained SimAlign baseline ([Jalili Sabet et al., 2020](https://aclanthology.org/2020.findings-emnlp.147/)).
 
-`mode` controls how alignments are extracted: "argmax" (default) or "itermax" ([Jalili Sabet et al., 2020](https://aclanthology.org/2020.findings-emnlp.147/)). With "itermax", `max_count` sets the number of refinement iterations (default 2; higher means more recall).
+`mode` controls how alignments are extracted: `argmax` (default) or `itermax` ([Jalili Sabet et al., 2020](https://aclanthology.org/2020.findings-emnlp.147/)). With `itermax`, `max_count` sets the number of refinement iterations (default 2; higher means more recall).
 
-`layer` and `k` default to the values found best in our experiments; both are overridable. `k` is the one constraint hyperparameter for every method: the half-width `w` in coarse blocks for CTFAlign, and a tolerance in tokens for MDPAlign. The layer is set to the optimal for document-level by default (`granularity="documents"`); pass `lang_pair="en-fr"` to use a language-pair-optimal layer.
+`layer` and `k` default to the values found best in our experiments; both are overridable. `k` is the one constraint hyperparameter for every method: the buffer in coarse blocks for CTFAlign, and a tolerance in tokens for MDPAlign. The layer is set to the optimal for document-level by default (`granularity="documents"`); pass `lang_pair="en-fr"` to use a language-pair-optimal layer.
 
 The built-in optimal layers cover the models and language pairs from the accompanying paper. At document granularity: `sentence-transformers/LaBSE`, `jhu-clsp/mmBERT-base`, `EuroBERT/EuroBERT-610m`, `Qwen/Qwen3-Embedding-0.6B/4B`; EN-FR/RO/JA/ZH, LA-GR. `granularity="sentences"` additionally covers `bert-base-multilingual-cased` and `xlm-roberta-large`. Note that EN-CZ, which appears in the results table below, has no tuned layer in either table: passing `lang_pair="en-cz"` falls back to the model's modal-best layer across the other pairs.
-
-The lookup key is the part of the model id after the final `/`, matched exactly — `EuroBERT/EuroBERT-610M` misses the `EuroBERT-610m` entry. With no tuned layer for the model, the aligner warns and falls back to two-thirds of the model's depth, which is unlikely to be optimal; pass `layer=...` in that case.
 
 For any other model, we recommend finding the optimal the layer on a development set. Find the development sets for the language pairs covered in our paper here: https://huggingface.co/datasets/ZurichNLP/document-level-word-alignment
 
@@ -89,19 +87,7 @@ Alignment indices are over whitespace-split words; for languages without whitesp
 
 ### Documents longer than the model's context window
 
-A document that does not fit the encoder's context window is split into consecutive, non-overlapping chunks that are encoded independently, and the resulting token embeddings are concatenated. Alignments are still computed over the whole document, but because each chunk is encoded without the others as context, no alignment can cross a chunk boundary. The aligner warns once when this happens.
-
-The threshold is the model's maximum sequence length, in tokens:
-
-| Model                       | Chunks above    |
-| --------------------------- | --------------- |
-| `sentence-transformers/LaBSE` | 510 tokens    |
-| `jhu-clsp/mmBERT-base`      | 8190 tokens     |
-| `EuroBERT/EuroBERT-610m`    | 8190 tokens     |
-| `Qwen/Qwen3-Embedding-0.6B` | 32766 tokens    |
-| `Qwen/Qwen3-Embedding-4B`   | 40958 tokens    |
-
-For LaBSE this affects most documents (roughly 480+ English words), so prefer a long-context model for document-level alignment.
+A document that does not fit the encoder's context window is split into consecutive, non-overlapping chunks that are encoded independently, and the resulting token embeddings are concatenated. Alignments are still computed over the whole document, but because each chunk is encoded without the others as context. The aligner warns once when this happens.
 
 ## Bring your own embeddings
 
@@ -148,7 +134,7 @@ Or implement the `Encoder` protocol (`encode(text) -> EncodedText`) for your fra
 
 `mode` selects the base SimAlign ([Jalili Sabet et al. 2020](https://github.com/cisnlp/simalign)) variant: `"argmax"` (default) or `"itermax"`.
 
-The following table shows the document-level word-alignment **AER** (alignment error rate; **lower is better**) on the tested language pairs in our experiments:
+The following table shows the document-level word-alignment AER (alignment error rate; lower is better) on the tested language pairs in our experiments:
 
 
 | Model              | Method   | Mode    | en-fr     | en-ro     | en-ja     | en-zh     | la-gr     | en-cz     | Avg       |
@@ -166,8 +152,8 @@ For full experiment code and test data see (TODO: Add link to experiment repo).
 
 1. Open `viewer.html`.
 2. Choose or drag-and-drop a JSONL file produced by `ctfalign align`.
-3. The two texts appear side by side. **Hover a word** to highlight its aligned
-  words in the other text; **click** to pin the highlight; use the **← / →**
+3. The two texts appear side by side. Hover a word to highlight its aligned
+  words in the other text; click to pin the highlight; use the ← / →
    keys or the Prev/Next buttons to flip through samples.
 
 It reads both `--label-format` encodings (`string` and `pairs`).

@@ -35,8 +35,36 @@ The built-in encoder is HuggingFace `transformers`; you can also bring your own 
 ```python
 from ctfalign import WordAligner
 
-aligner = WordAligner.from_huggingface("Qwen/Qwen3-Embedding-4B", method="ctfalign")
-aligner.align("each of them is very complex , but the link between the two is even more complex which makes the whole situation for most people understandably confusing . the commissionners went on : they are constrained by limits which are imposed in order to ensure that the freedom of one person does not violate that of another .", "chacun en lui - même est très complexe et le lien entre les deux le est encore davantage de sorte que pour beaucoup la situation présente est confuse . je poursuis la lecture de les recommandations de les commissaires : ils sont restreints par certaines limites qui ont été fixées pour garantir que la liberté de une personne ne empiète pas sur celle de une autre .")   # -> [(0, 0), (2, 0), (3, 5), (4, 6), (5, 7), (8, 9), (9, 10), (10, 11), (12, 13), (14, 16), (15, 17), (17, 20), (19, 17), (21, 24), (22, 21), (23, 22), (26, 27), (27, 28), (29, 38), (31, 31), (32, 39), (33, 40), (34, 41), (35, 42), (36, 43), (37, 45), (38, 46), (39, 45), (40, 49), (44, 51), (45, 51), (46, 53), (47, 54), (48, 55), (50, 57), (52, 60), (53, 61), (55, 63), (56, 65), (57, 66)]
+aligner = WordAligner.from_huggingface(
+    "Qwen/Qwen3-Embedding-4B",
+    method="ctfalign",
+)
+
+alignments = aligner.align(
+    (
+        "each of them is very complex , but the link between the two is even "
+        "more complex which makes the whole situation for most people "
+        "understandably confusing . the commissionners went on : they are "
+        "constrained by limits which are imposed in order to ensure that the "
+        "freedom of one person does not violate that of another ."
+    ),
+    (
+        "chacun en lui - même est très complexe et le lien entre les deux le "
+        "est encore davantage de sorte que pour beaucoup la situation présente "
+        "est confuse . je poursuis la lecture de les recommandations de les "
+        "commissaires : ils sont restreints par certaines limites qui ont été "
+        "fixées pour garantir que la liberté de une personne ne empiète pas "
+        "sur celle de une autre ."
+    ),
+)
+
+# -> [(0, 0), (2, 0), (3, 5), (4, 6), (5, 7), (8, 9), (9, 10),
+#     (10, 11), (12, 13), (14, 16), (15, 17), (17, 20), (19, 17),
+#     (21, 24), (22, 21), (23, 22), (26, 27), (27, 28), (29, 38),
+#     (31, 31), (32, 39), (33, 40), (34, 41), (35, 42), (36, 43),
+#     (37, 45), (38, 46), (39, 45), (40, 49), (44, 51), (45, 51),
+#     (46, 53), (47, 54), (48, 55), (50, 57), (52, 60), (53, 61),
+#     (55, 63), (56, 65), (57, 66)]
 ```
 
 `method` controls the structural constraint:

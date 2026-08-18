@@ -6,7 +6,7 @@
 
 CTFAlign provides training-free word alignment for parallel documents, without requiring sentence-level segmentation or alignment. It extends embedding-based word alignment to long documents by constraining the alignment search space.
 
-The package implements two methods from *Scaling Unsupervised Word Alignment to Documents with Structural Constraints* (TODO: link): **CTFAlign**, a coarse-to-fine approach designed to accommodate structural differences between documents, and **MDPAlign**, a lightweight diagonal prior for documents with approximately parallel structure. Both methods are encoder-agnostic and can be used with built-in Hugging Face models or your own token embeddings.
+The package implements two methods from *Scaling Unsupervised Word Alignment to Documents via Structural Constraints* (TODO: link): **CTFAlign**, a coarse-to-fine approach designed to accommodate structural differences between documents, and **MDPAlign**, a lightweight diagonal prior for documents with approximately parallel structure. Both methods are encoder-agnostic and can be used with built-in Hugging Face models or your own token embeddings.
 
 The experimental code from the paper can be found here: https://github.com/ZurichNLP/document-level-word-alignment
 

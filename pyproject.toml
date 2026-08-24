@@ -49,7 +49,7 @@ Homepage = "https://github.com/ZurichNLP/CTFAlign"
 Repository = "https://github.com/ZurichNLP/CTFAlign"
 Issues = "https://github.com/ZurichNLP/CTFAlign/issues"
 Paper = "https://arxiv.org/abs/2608.21023"
-Demo = "https://huggingface.co/spaces/miwytt/ctfalign"
+Demo = "https://huggingface.co/spaces/miwytt/ctfalign-demo"
 "Experiment Code" = "https://github.com/ZurichNLP/document-level-word-alignment"
 
 [tool.hatch.build.targets.wheel]

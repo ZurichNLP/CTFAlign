@@ -204,7 +204,6 @@ For full experiment code and test data see (TODO: Add link to experiment repo).
   words in the other text; click to pin the highlight; use the ← / →
    keys or the Prev/Next buttons to flip through samples.
 
-It reads both `--label-format` encodings (`string` and `pairs`).
 
 Find a more interactive demo here: https://huggingface.co/spaces/miwytt/ctfalign
 

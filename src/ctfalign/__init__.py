@@ -13,6 +13,7 @@ Bring your own embeddings (no framework dependency)::
 """
 from .aligner import (
     METHODS,
+    UNITS,
     WordAligner,
     align_from_embeddings,
     align_from_similarity,
@@ -29,6 +30,7 @@ __all__ = [
     "alignment_record",
     "to_word_alignment_label_notation",
     "METHODS",
+    "UNITS",
     "EncodedText",
     "Encoder",
 ]

@@ -111,7 +111,21 @@ for pairs in aligner.align_pairs(zip(src, tgt)):
     print(" ".join(f"{i}-{j}" for i, j in pairs))
 ```
 
-Alignment indices are over whitespace-split words; for languages without whitespace (e.g. zh, ja) pre-segment the text with spaces.
+### Alignment units
+
+By default, alignment indices are over whitespace-split words — the setting used for all results reported below. Languages without whitespace word boundaries (zh, ja, ...) were pre-segmented with spaces in the experiments.
+
+When pre-segmenting is not an option, pass `units="tokens"` (CLI: `--units tokens`) to skip word projection entirely and align at the encoder's own subword tokens:
+
+```python
+aligner = WordAligner.from_huggingface(
+    "Qwen/Qwen3-Embedding-4B", method="ctfalign", units="tokens",
+)
+pairs, units_a, units_b = aligner.align_with_units(text_a, text_b)
+```
+
+`align_with_units` returns the strings the indices point at, in one encoding pass — necessary in token mode, where the indices refer to subwords rather than to anything recoverable from the input text. The CLI writes them as `units_a` / `units_b` in each JSONL record.
+
 
 ### Documents longer than the model's context window
 
@@ -130,7 +144,7 @@ Already have token embeddings? Skip the encoder entirely and pass four arrays pe
 | `word_ids_b` | length-`n_tokens_b` int list | same, for the target                                           |
 
 
-`word_ids` maps subword tokens back to words: `[0, 0, 1, 2, 2]` means tokens 0–1 form word 0, token 2 is word 1, tokens 3–4 are word 2. The returned `(i, j)` pairs are word indices.
+`word_ids` maps subword tokens back to words: `[0, 0, 1, 2, 2]` means tokens 0–1 form word 0, token 2 is word 1, tokens 3–4 are word 2. The returned `(i, j)` pairs are word indices. For token-level alignment, pass the identity map (`list(range(n_tokens))`) and the pairs come back as token indices.
 
 ```python
 import numpy as np

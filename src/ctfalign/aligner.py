@@ -32,6 +32,7 @@ _METHOD_ALIASES = {
     "ctfalign": "ctfalign",
 }
 METHODS = ("simalign", "mdpalign-strict", "mdpalign-fuzzy", "ctfalign")
+UNITS = ("words", "tokens")
 
 
 def _normalize_method(method):
@@ -39,6 +40,12 @@ def _normalize_method(method):
     if key not in _METHOD_ALIASES:
         raise ValueError(f"Unknown method {method!r}; choose from {METHODS}.")
     return _METHOD_ALIASES[key]
+
+
+def _normalize_units(units):
+    if units not in UNITS:
+        raise ValueError(f"Unknown units {units!r}; choose from {UNITS}.")
+    return units
 
 
 def _print_progress(idx, total):
@@ -99,19 +106,38 @@ def align_from_embeddings(emb_a, emb_b, word_ids_a, word_ids_b,
 
 
 class WordAligner:
-    """High-level aligner: encode two texts and return word-level alignments."""
+    """High-level aligner: encode two texts and return their alignment.
 
-    def __init__(self, encoder, method="ctfalign", mode="argmax", k=None, max_count=2):
+    ``units`` selects what the returned indices point at:
+
+    ``"words"`` (default)
+        Whitespace-split words -- the setting used throughout the paper. Texts in
+        languages without whitespace word boundaries (zh, ja, ...) must be
+        pre-segmented, as they were for the reported experiments.
+    ``"tokens"``
+        The encoder's own subword tokens, i.e. no projection to words at all.
+        Use this when the input is not whitespace-segmented and pre-segmenting is
+        not an option. The indices then point into ``EncodedText.tokens``, which
+        ``align_with_units`` returns alongside the pairs.
+
+    The choice is explicit rather than inferred from the script: guessing would
+    silently change the meaning of the output, including for the pre-segmented
+    zh/ja inputs the paper's numbers are based on.
+    """
+
+    def __init__(self, encoder, method="ctfalign", mode="argmax", k=None, max_count=2,
+                 units="words"):
         self.encoder = encoder
         self.method = _normalize_method(method)
         self.mode = mode
         self.k = resolve_k(self.method, k)
         self.max_count = max_count
+        self.units = _normalize_units(units)
 
     @classmethod
     def from_huggingface(cls, model_name, layer=None, lang_pair=None, granularity="documents",
                          method="ctfalign", mode="argmax", k=None, max_count=2,
-                         device=None, token=None, **encoder_kwargs):
+                         units="words", device=None, token=None, **encoder_kwargs):
         """Build an aligner backed by a HuggingFace model.
 
         ``layer`` defaults to the empirically-best layer for the model (and
@@ -140,23 +166,59 @@ class WordAligner:
             )
 
         encoder = HFEncoder(model_name, layer, device=device, token=token, **encoder_kwargs)
-        return cls(encoder, method=method, mode=mode, k=k, max_count=max_count)
+        return cls(encoder, method=method, mode=mode, k=k, max_count=max_count,
+                   units=units)
+
+    def _units_and_ids(self, text, encoded):
+        """The display units for one side and the b2w map to project onto them.
+
+        In ``"tokens"`` mode the map is the identity, so the token-level
+        alignment is returned as-is with no projection.
+        """
+        if self.units == "words":
+            return text.split(), encoded.word_ids
+        if encoded.tokens is None:
+            raise ValueError(
+                f"units='tokens' needs token surface strings, but "
+                f"{type(self.encoder).__name__} returned EncodedText(tokens=None). "
+                f"Populate EncodedText.tokens in your encoder, or use units='words'."
+            )
+        return list(encoded.tokens), list(range(len(encoded.tokens)))
 
     def align(self, text_a, text_b):
-        """Return a sorted list of ``(word_idx_a, word_idx_b)`` alignment pairs."""
+        """Return a sorted list of ``(idx_a, idx_b)`` alignment pairs.
+
+        Indices refer to whitespace words or to encoder tokens, per ``units``.
+        """
+        return self.align_with_units(text_a, text_b)[0]
+
+    def align_with_units(self, text_a, text_b):
+        """Return ``(pairs, units_a, units_b)`` from a single encoding pass.
+
+        ``units_a`` / ``units_b`` are the strings the pair indices point at, so
+        the alignment is readable without re-deriving the segmentation. Useful in
+        ``units="tokens"`` mode, where the indices are otherwise opaque.
+        """
         a = self.encoder.encode(text_a)
         b = self.encoder.encode(text_b)
-        return align_from_embeddings(
-            a.embeddings, b.embeddings, a.word_ids, b.word_ids,
+        units_a, word_ids_a = self._units_and_ids(text_a, a)
+        units_b, word_ids_b = self._units_and_ids(text_b, b)
+        pairs = align_from_embeddings(
+            a.embeddings, b.embeddings, word_ids_a, word_ids_b,
             method=self.method, mode=self.mode, k=self.k, max_count=self.max_count,
         )
+        return pairs, units_a, units_b
 
-    def align_pairs(self, pairs, show_progress=False, progress_callback=None):
+    def align_pairs(self, pairs, show_progress=False, progress_callback=None,
+                    with_units=False):
         """Align many text pairs.
 
         ``pairs``: iterable of ``(text_a, text_b)`` tuples.
         Returns a list of per-pair alignments, in input order. Empty/blank texts
         yield an empty alignment so positional correspondence is preserved.
+
+        ``with_units=True`` returns ``(pairs, units_a, units_b)`` triples instead
+        of bare pair lists, without a second encoding pass.
 
         ``progress_callback``, if given, is called as ``callback(idx, total)``
         after each pair (1-indexed). ``show_progress=True`` installs a default
@@ -172,7 +234,9 @@ class WordAligner:
         results = []
         for idx, (text_a, text_b) in enumerate(pairs, 1):
             if not text_a.strip() or not text_b.strip():
-                results.append([])
+                results.append(([], [], []) if with_units else [])
+            elif with_units:
+                results.append(self.align_with_units(text_a, text_b))
             else:
                 results.append(self.align(text_a, text_b))
             if progress_callback:

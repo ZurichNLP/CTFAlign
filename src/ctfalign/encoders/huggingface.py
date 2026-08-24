@@ -1,8 +1,9 @@
 """HuggingFace token-level encoder (the batteries-included default).
 
 Extracts per-token hidden states at a chosen layer, with the same long-sequence
-chunking strategy as the research pipeline, and builds the token-to-word map via
-character offsets. Uses ``transformers`` (a core dependency of ctfalign).
+chunking strategy as the research pipeline, builds the token-to-word map via
+character offsets, and returns the token surface strings (used for token-level
+alignment). Uses ``transformers`` (a core dependency of ctfalign).
 
 Long-sequence warnings: ``transformers`` emits its own "Token indices sequence
 length is longer ..." message, which claims running the sequence "will result in
@@ -45,6 +46,25 @@ class HFEncoder:
         self.max_length = self.model.config.max_position_embeddings
         self._warned_long = False
 
+    # -- tokens --------------------------------------------------------------
+
+    def _surface_tokens(self, ids):
+        """Human-readable surface string for each token id.
+
+        ``convert_tokens_to_string`` on a single token resolves the SentencePiece
+        and byte-level word-boundary markers (U+2581, U+0120); WordPiece's ``##``
+        survives a single-token decode, so it is stripped separately. Falls back
+        to the raw token when the decode is empty (e.g. a lone marker).
+        """
+        tok = self.tokenizer
+        surfaces = []
+        for t in tok.convert_ids_to_tokens(ids):
+            s = tok.convert_tokens_to_string([t]).strip()
+            if s.startswith("##"):
+                s = s[2:]
+            surfaces.append(s or t)
+        return surfaces
+
     # -- embedding -----------------------------------------------------------
 
     def _warn_long_sequence(self, length, chunk_size):
@@ -70,7 +90,12 @@ class HFEncoder:
         )
 
     def _embed(self, text):
-        """Return non-special token embeddings ``(n_tokens, hidden)`` for text."""
+        """Return ``(embeddings, tokens)`` over the non-special tokens of text.
+
+        Both come out of the same tokenisation pass, so ``len(tokens)`` always
+        equals ``embeddings.shape[0]`` -- unlike ``word_ids``, which is built
+        from a separate offset-mapping pass and can drift on chunked documents.
+        """
         chunk_size = self.max_length - 2
         length = len(self.tokenizer.encode(text, add_special_tokens=False, verbose=False))
         if length > chunk_size:
@@ -92,13 +117,18 @@ class HFEncoder:
                 )
             emb = out["hidden_states"][self.layer][0]
             keep = enc["attention_mask"].bool()[0] & ~special[0]
-            return emb[keep]
+            kept_ids = enc["input_ids"][0][keep].tolist()
+            return emb[keep], self._surface_tokens(kept_ids)
 
     def _embed_chunked(self, text):
-        """Embed a long text in non-overlapping context-window-sized chunks."""
+        """Embed a long text in non-overlapping context-window-sized chunks.
+
+        Returns ``(embeddings, tokens)`` concatenated across chunks.
+        """
         chunk_size = self.max_length - 2
         full_ids = self.tokenizer.encode(text, add_special_tokens=False, verbose=False)
         chunk_embeddings = []
+        chunk_tokens = []
         for i in range(0, len(full_ids), chunk_size):
             chunk_ids = full_ids[i:i + chunk_size]
             chunk_text = self.tokenizer.decode(chunk_ids, skip_special_tokens=True)
@@ -113,11 +143,14 @@ class HFEncoder:
                 emb = out["hidden_states"][self.layer][0]
                 keep = enc["attention_mask"].bool()[0] & ~special[0]
                 chunk_embeddings.append(emb[keep])
-        return torch.cat(chunk_embeddings, dim=0)
+                kept_ids = enc["input_ids"][0][keep].tolist()
+                chunk_tokens.extend(self._surface_tokens(kept_ids))
+        return torch.cat(chunk_embeddings, dim=0), chunk_tokens
 
     # -- public API ----------------------------------------------------------
 
     def encode(self, text: str) -> EncodedText:
-        embeddings = self._embed(text)
+        embeddings, tokens = self._embed(text)
         word_ids = build_b2w_map(self.tokenizer, text)
-        return EncodedText(embeddings=embeddings.cpu(), word_ids=word_ids)
+        return EncodedText(embeddings=embeddings.cpu(), word_ids=word_ids,
+                           tokens=tokens)

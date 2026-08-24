@@ -8,7 +8,6 @@ CTFAlign provides training-free word alignment for parallel documents, without r
 
 The package implements two methods from [*Scaling Unsupervised Word Alignment to Documents via Structural Constraints*](https://arxiv.org/abs/2608.21023): **CTFAlign**, a coarse-to-fine approach designed to accommodate structural differences between documents, and **MDPAlign**, a lightweight diagonal prior for documents with approximately parallel structure. Both methods are encoder-agnostic and can be used with built-in Hugging Face models or your own token embeddings.
 
-The experimental code from the paper can be found here: https://github.com/ZurichNLP/document-level-word-alignment
 
 ## Contents
 
@@ -192,7 +191,7 @@ The following table shows the document-level word-alignment AER (alignment error
 | Qwen3-Embedding-4B | MDPAlign | argmax  | 0.232     | 0.342     | 0.752     | **0.254** | 0.397     | 0.221     | 0.366     |
 | Qwen3-Embedding-4B | MDPAlign | itermax | 0.239     | **0.330** | 0.728     | 0.271     | 0.455     | 0.257     | 0.380     |
 
-For full experiment code and test data see (TODO: Add link to experiment repo).
+For full experiment code and test data see https://github.com/ZurichNLP/document-level-word-alignment.
 
 ## Visualizing alignments
 

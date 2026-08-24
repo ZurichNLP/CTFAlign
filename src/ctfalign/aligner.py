@@ -16,9 +16,9 @@ import torch
 from .align import argmax_align, iter_max
 from .defaults import resolve_k, resolve_layer
 from .masks import (
-    add_belt_mask_token_count_fixed_on_longer_side,
-    add_soft_belt_mask_token_count_fixed_on_longer_side,
-    pyramid_hard_lenient2,
+    apply_mdpalign_strict,
+    apply_mdpalign_fuzzy,
+    ctfalign,
 )
 from .similarity import get_sim_matrix
 from .wordmap import project_token_alignment
@@ -64,12 +64,12 @@ def align_from_similarity(sim, word_ids_a, word_ids_b,
     sim = torch.as_tensor(sim, dtype=torch.float32)
 
     if method == "mdpalign-strict":
-        sim = add_belt_mask_token_count_fixed_on_longer_side(sim, k)
+        sim = apply_mdpalign_strict(sim, k)
     elif method == "mdpalign-fuzzy":
-        sim = add_soft_belt_mask_token_count_fixed_on_longer_side(sim, k)
+        sim = apply_mdpalign_fuzzy(sim, k)
 
     if method == "ctfalign":
-        token_alignment = pyramid_hard_lenient2(sim, f"simalign-{mode}", width=int(k))
+        token_alignment = ctfalign(sim, f"simalign-{mode}", width=int(k))
     elif mode == "argmax":
         token_alignment = argmax_align(sim, drop_negative=True)
     elif mode == "itermax":

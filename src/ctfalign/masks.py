@@ -1,8 +1,10 @@
 """Positional masking strategies applied to the similarity matrix.
 
-- ``add_belt_mask_token_count_fixed_on_longer_side``      -> MDPAlign strict
-- ``add_soft_belt_mask_token_count_fixed_on_longer_side`` -> MDPAlign fuzzy
-- ``pyramid_hard_lenient2``                               -> CTFAlign
+- ``apply_mdpalign_strict`` -> MDPAlign strict
+- ``apply_mdpalign_fuzzy``  -> MDPAlign fuzzy
+- ``ctfalign``              -> CTFAlign
+
+Names match the paper and the research pipeline's ``get_predictions.py``.
 
 All belt functions normalise positions so the diagonal spans both corners and
 ``token_count`` is interpreted as a tolerance of +/-N tokens on the *longer*
@@ -15,7 +17,7 @@ import torch.nn.functional as F
 from .align import argmax_align, iter_max
 
 
-def add_belt_mask_token_count_fixed_on_longer_side(similarity_matrix, token_count):
+def apply_mdpalign_strict(similarity_matrix, token_count):
     """Hard diagonal band (MDPAlign strict)."""
     m, n = similarity_matrix.shape
     i_idx = np.arange(m)[:, None] / m
@@ -25,7 +27,7 @@ def add_belt_mask_token_count_fixed_on_longer_side(similarity_matrix, token_coun
     return similarity_matrix * mask
 
 
-def add_soft_belt_mask_token_count_fixed_on_longer_side(similarity_matrix, token_count):
+def apply_mdpalign_fuzzy(similarity_matrix, token_count):
     """Soft (Gaussian) diagonal band (MDPAlign fuzzy)."""
     m, n = similarity_matrix.shape
     i_idx = np.arange(m)[:, None] / m
@@ -36,18 +38,17 @@ def add_soft_belt_mask_token_count_fixed_on_longer_side(similarity_matrix, token
     return similarity_matrix * weights
 
 
-def pyramid_hard_lenient2(similarity_matrix, method, width=0, drop_negative=True):
+def ctfalign(similarity_matrix, method, width=0, drop_negative=True):
     """Coarse-to-fine pyramid masking with lenient recovery (CTFAlign).
 
-    Starts from a 2x2 grid and halves the block size each level. Aligned coarse
+    Starts from a ~2x2 grid and halves the block size each level. Aligned coarse
     blocks (plus a +/-``width`` buffer) are retained; any ``(row, col)`` at the
     intersection of an empty block-row and empty block-column is recovered with
     the same +/-``width`` buffer. Returns the token-level alignment at the
     finest (1x1) level.
 
     ``method`` is ``"simalign-argmax"`` or ``"simalign-itermax"``.
-    ``drop_negative`` discards pairs whose similarity is not strictly positive
-    at every level.
+    ``drop_negative`` discards pairs whose similarity is not positive.
     """
     m, n = similarity_matrix.shape
     block_h = max(m // 2, 1)
@@ -74,7 +75,7 @@ def pyramid_hard_lenient2(similarity_matrix, method, width=0, drop_negative=True
             coarse_alignment = iter_max(coarse.cpu().numpy(),
                                         drop_negative=drop_negative)
         else:
-            raise NotImplementedError("Method not implemented for pyramid_hard_lenient2.")
+            raise NotImplementedError("Method not implemented for ctfalign.")
 
         if block_h == 1 and block_w == 1:
             return coarse_alignment

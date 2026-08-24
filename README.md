@@ -22,10 +22,16 @@ The experimental code from the paper can be found here: https://github.com/Zuric
 
 ## Install
 
-Python 3.11 recommended.
+Requires Python 3.10 or newer.
 
 ```bash
-pip install ctfalign # not yet published to PyPI; install from source with pip install .
+pip install ctfalign
+```
+
+Or for development:
+
+```bash
+pip install -e ".[dev]"
 ```
 
 The built-in encoder is HuggingFace `transformers`; you can also bring your own embeddings from any framework (see [Bring your own embeddings](#bring-your-own-embeddings)).

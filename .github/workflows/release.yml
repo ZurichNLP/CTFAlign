@@ -1,0 +1,136 @@
+# Publish ctfalign to PyPI.
+#
+# Setup required once, before the first release:
+#   1. On PyPI, add a Trusted Publisher for this project:
+#      Publishing -> Add a new publisher -> GitHub
+#        Owner: ZurichNLP   Repository: CTFAlign
+#        Workflow: release.yml   Environment: pypi
+#      Do the same on test.pypi.org with Environment: testpypi.
+#      Trusted publishing uses a short-lived OIDC token, so no API token is
+#      stored in the repository.
+#   2. In GitHub repo settings, create environments named `pypi` and `testpypi`
+#      (optionally requiring manual approval before a release runs).
+#
+# To release:
+#   - Dry run first: Actions -> Release -> Run workflow -> target `testpypi`.
+#     Then check it resolves in a clean environment:
+#       pip install -i https://test.pypi.org/simple/ \
+#         --extra-index-url https://pypi.org/simple/ ctfalign
+#   - Then bump `version` in pyproject.toml, update CHANGELOG.md, commit, and
+#     push a matching tag: `git tag v0.1.0 && git push origin v0.1.0`.
+#
+# A version number on PyPI can never be reused, even after deletion. Get the
+# TestPyPI run right before tagging.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to publish"
+        required: true
+        default: testpypi
+        type: choice
+        options: [testpypi, pypi]
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          twine check --strict dist/*
+
+      - name: Verify the tag matches the packaged version
+        # Guards against tagging v0.2.0 while pyproject.toml still says 0.1.0,
+        # which would publish the wrong version under the right tag.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          built=$(ls dist/*.tar.gz | sed -E 's/.*-([0-9][^-]*)\.tar\.gz/\1/')
+          echo "tag=$tag built=$built"
+          [ "$tag" = "$built" ] || { echo "::error::tag $tag != version $built"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  smoke-test:
+    name: Install the wheel and run the smoke tests
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.13"]   # the declared floor and ceiling
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install from the built wheel, not the source tree
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl pytest
+          python -c "import ctfalign; print(ctfalign.__version__)"
+          ctfalign --help
+
+      - name: Run the smoke tests against the installed package
+        # Run from a scratch directory so `import ctfalign` cannot pick up
+        # ./src and silently test the source tree instead of the wheel.
+        run: |
+          mkdir -p /tmp/pkgtest && cp tests/test_smoke.py /tmp/pkgtest/
+          cd /tmp/pkgtest && python -m pytest test_smoke.py -q
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: smoke-test
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write        # required for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: smoke-test
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write        # required for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

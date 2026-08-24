@@ -7,15 +7,34 @@ name = "ctfalign"
 version = "0.1.0"
 description = "CTFAlign and MDPAlign: document-level word alignment from multilingual token embeddings"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Michelle Wastl" }]
 keywords = ["word-alignment", "multilingual", "embeddings", "nlp", "documents"]
+# No License classifier: the SPDX `license` field above supersedes it (PEP 639).
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+# Lower bounds are the oldest releases whose APIs this package actually uses:
+# torch 2.0 for multi-argument Tensor.squeeze(0, 1) (masks.py), transformers 4.32
+# for the `token=` argument that replaced `use_auth_token` (encoders/huggingface.py).
+# Without them pip is free to pair a too-old torch with a numpy it cannot talk to,
+# which breaks iter_max at runtime -- it is the path that calls .numpy().
 dependencies = [
-    "numpy",
-    "torch",
-    "transformers",
+    "numpy>=1.21",
+    "torch>=2.0",
+    "transformers>=4.32",
 ]
 
 [project.optional-dependencies]
@@ -26,7 +45,12 @@ dev = ["pytest", "pandas"]
 ctfalign = "ctfalign.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/miwytt/doc-wordalign"
+Homepage = "https://github.com/ZurichNLP/CTFAlign"
+Repository = "https://github.com/ZurichNLP/CTFAlign"
+Issues = "https://github.com/ZurichNLP/CTFAlign/issues"
+Paper = "https://arxiv.org/abs/2608.21023"
+Demo = "https://huggingface.co/spaces/miwytt/ctfalign"
+"Experiment Code" = "https://github.com/ZurichNLP/document-level-word-alignment"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ctfalign"]
@@ -37,6 +61,9 @@ packages = ["src/ctfalign"]
 # and its fixture alone is ~95% of the archive.
 [tool.hatch.build.targets.sdist]
 exclude = [
+    "/.gitignore",
+    "/.github",
+    "/.pytest_cache",
     "tests/fixtures",
     "tests/test_golden.py",
     "tests/_make_golden_fixture.py",

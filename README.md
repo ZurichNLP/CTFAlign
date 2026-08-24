@@ -1,6 +1,6 @@
 # CTFAlign: Document-level Word Alignment
 
-[![Paper](https://img.shields.io/badge/Paper-B31B1B.svg)](TODO)
+[![Paper](https://img.shields.io/badge/Paper-B31B1B.svg)](https://arxiv.org/abs/2608.21023)
 [![Experimental Code](https://img.shields.io/badge/Experimental%20Code-6A5ACD.svg)](https://github.com/ZurichNLP/document-level-word-alignment)
 [![Demo](https://img.shields.io/badge/Demo-4C8BF5.svg)](https://huggingface.co/spaces/miwytt/ctfalign)
 

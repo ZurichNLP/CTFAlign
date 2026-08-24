@@ -47,12 +47,15 @@
   .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:600;
               color:var(--muted); margin:0 0 14px; position:sticky; top:-20px;
               background:var(--panel); padding:4px 0; }
-  .word { padding:2px 4px; border-radius:6px; cursor:default;
+  .unit { padding:2px 4px; border-radius:6px; cursor:default;
           transition:background .12s, color .12s, box-shadow .12s; }
-  .word:hover { background:var(--hl-soft); }
-  .word.active, .word.aligned { background:var(--hl); color:#fff; }
-  .word.active { box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--hl); }
-  .word[data-unaligned] { color:#b8bdc9; }
+  .unit:hover { background:var(--hl-soft); }
+  .unit.active, .unit.aligned { background:var(--hl); color:#fff; }
+  .unit.active { box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--hl); }
+  .unit[data-unaligned] { color:#b8bdc9; }
+  .panel h2 .mode { text-transform:none; letter-spacing:0; color:var(--hl-strong);
+                    background:var(--hl-soft); padding:2px 7px; border-radius:999px;
+                    margin-left:8px; font-size:10px; }
   #info { padding:14px 28px 32px; font-size:13px; color:#4b5160; min-height:20px; }
   .empty { padding:64px; text-align:center; color:var(--muted); background:var(--panel);
            border:1px dashed var(--border); border-radius:var(--radius); width:100%; }
@@ -72,7 +75,7 @@
     <button id="next">Next ›</button>
   </div>
 </header>
-<div class="hint">Hover a word to highlight its alignment in the other text · click to pin · ←/→ to flip through samples</div>
+<div class="hint">Hover a unit to highlight its alignment in the other text · click to pin · ←/→ to flip through samples</div>
 <div id="meta"></div>
 <div id="panels">
   <div class="empty" id="empty">Drop or choose a JSONL file produced by <code>ctfalign align</code>.</div>
@@ -130,8 +133,13 @@ function splitWords(s) {
 }
 
 function parseRecord(rec) {
-  const wordsA = splitWords(rec.text_a);
-  const wordsB = splitWords(rec.text_b);
+  // `ctfalign align --units tokens` writes units_a / units_b, and the labels
+  // index those rather than whitespace words. Falling back to splitting the raw
+  // text there would misalign every index -- and for text without whitespace
+  // word boundaries it collapses the whole side to a single unit.
+  const tokenLevel = Array.isArray(rec.units_a) || Array.isArray(rec.units_b);
+  const unitsA = Array.isArray(rec.units_a) ? rec.units_a.map(String) : splitWords(rec.text_a);
+  const unitsB = Array.isArray(rec.units_b) ? rec.units_b.map(String) : splitWords(rec.text_b);
   let pairs = [];
   const L = rec.labels;
   if (typeof L === 'string') {
@@ -145,7 +153,7 @@ function parseRecord(rec) {
     (a2b[i] = a2b[i] || []).push(j);
     (b2a[j] = b2a[j] || []).push(i);
   }
-  return { rec, wordsA, wordsB, a2b, b2a };
+  return { rec, unitsA, unitsB, a2b, b2a, tokenLevel };
 }
 
 function render() {
@@ -182,13 +190,17 @@ function buildPanel(side, s) {
   div.className = 'panel';
   const h = document.createElement('h2');
   h.textContent = langLabel(s, side);
+  const badge = document.createElement('span');
+  badge.className = 'mode';
+  badge.textContent = s.tokenLevel ? 'tokens' : 'words';
+  h.appendChild(badge);
   div.appendChild(h);
 
-  const words = side === 'a' ? s.wordsA : s.wordsB;
-  const map   = side === 'a' ? s.a2b   : s.b2a;
-  words.forEach((w, idx) => {
+  const units = side === 'a' ? s.unitsA : s.unitsB;
+  const map   = side === 'a' ? s.a2b    : s.b2a;
+  units.forEach((w, idx) => {
     const span = document.createElement('span');
-    span.className = 'word';
+    span.className = 'unit';
     span.textContent = w;
     span.dataset.side = side;
     span.dataset.idx = idx;
@@ -208,38 +220,39 @@ function buildPanel(side, s) {
   return div;
 }
 
-function wordEl(side, idx) {
-  return panels.querySelector('.word[data-side="' + side + '"][data-idx="' + idx + '"]');
+function unitEl(side, idx) {
+  return panels.querySelector('.unit[data-side="' + side + '"][data-idx="' + idx + '"]');
 }
 
 function highlight(side, idx) {
   clearHighlight();
   const s = samples[cur];
-  const self = wordEl(side, idx);
+  const self = unitEl(side, idx);
   if (self) self.classList.add('active');
 
   const map        = side === 'a' ? s.a2b : s.b2a;
   const otherSide  = side === 'a' ? 'b' : 'a';
-  const otherWords = otherSide === 'a' ? s.wordsA : s.wordsB;
+  const otherUnits = otherSide === 'a' ? s.unitsA : s.unitsB;
   const targets    = map[idx] || [];
+  const noun       = s.tokenLevel ? ' token ' : ' word ';
 
-  targets.forEach(j => { const el = wordEl(otherSide, j); if (el) el.classList.add('aligned'); });
+  targets.forEach(j => { const el = unitEl(otherSide, j); if (el) el.classList.add('aligned'); });
 
-  const srcWord = (side === 'a' ? s.wordsA : s.wordsB)[idx];
+  const srcUnit = (side === 'a' ? s.unitsA : s.unitsB)[idx];
   if (targets.length) {
-    const tw = targets.map(j => j + ' “' + (otherWords[j] ?? '?') + '”').join(', ');
-    info.textContent = (side === 'a' ? 'Source' : 'Target') + ' word ' + idx +
-                       ' “' + srcWord + '”  ↔  ' + tw;
-    const first = wordEl(otherSide, targets[0]);
+    const tw = targets.map(j => j + ' “' + (otherUnits[j] ?? '?') + '”').join(', ');
+    info.textContent = (side === 'a' ? 'Source' : 'Target') + noun + idx +
+                       ' “' + srcUnit + '”  ↔  ' + tw;
+    const first = unitEl(otherSide, targets[0]);
     if (first) first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   } else {
-    info.textContent = (side === 'a' ? 'Source' : 'Target') + ' word ' + idx +
-                       ' “' + srcWord + '”  —  no alignment';
+    info.textContent = (side === 'a' ? 'Source' : 'Target') + noun + idx +
+                       ' “' + srcUnit + '”  —  no alignment';
   }
 }
 
 function clearHighlight() {
-  panels.querySelectorAll('.word.active, .word.aligned')
+  panels.querySelectorAll('.unit.active, .unit.aligned')
         .forEach(el => el.classList.remove('active', 'aligned'));
   if (!pinned) info.textContent = '';
 }

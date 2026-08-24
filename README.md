@@ -24,16 +24,16 @@ The package implements two methods from [*Scaling Unsupervised Word Alignment to
 Requires Python 3.10 or newer.
 
 ```bash
-pip install ctfalign
+git clone https://github.com/ZurichNLP/CTFAlign.git
+cd CTFAlign
+pip install .
 ```
 
-Or for development:
+For development, install in editable mode:
 
 ```bash
 pip install -e ".[dev]"
 ```
-
-The built-in encoder is HuggingFace `transformers`; you can also bring your own embeddings from any framework (see [Bring your own embeddings](#bring-your-own-embeddings)).
 
 ## Quick start
 
@@ -104,6 +104,7 @@ Each output line looks like:
 
 `labels` is word-alignment-label-notation (`i-j` pairs) by default; pass `--label-format pairs` to get a list of `[i, j]` pairs instead.
 
+
 Or in Python:
 
 ```python
@@ -118,7 +119,7 @@ for pairs in aligner.align_pairs(zip(src, tgt)):
 
 ### Alignment units
 
-By default, alignment indices are over whitespace-split words — the setting used for all results reported below. Languages without whitespace word boundaries (zh, ja, ...) were pre-segmented with spaces in the experiments.
+By default, alignment indices are over whitespace-split words — the setting used for all results reported below. Languages without whitespace segmentation (zh, ja, ...) were pre-segmented with spaces in the experiments.
 
 When pre-segmenting is not an option, pass `units="tokens"` (CLI: `--units tokens`) to skip word projection entirely and align at the encoder's own subword tokens:
 

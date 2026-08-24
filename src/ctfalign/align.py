@@ -35,6 +35,18 @@ def _keep_positive(pairs, matrix, drop_negative):
     return [(i, j) for i, j in pairs if float(matrix[i, j]) > 0]
 
 
+def _onehot_rows(idx: np.ndarray, n: int) -> np.ndarray:
+    """Row-wise one-hot matrix, i.e. ``np.eye(n)[idx]`` without the n x n identity.
+
+    The identity is a transient the result never keeps: only ``len(idx)`` of its
+    rows are gathered. Building the result directly avoids allocating it (at the
+    deepest pyramid level of a long document it runs to hundreds of MB).
+    """
+    out = np.zeros((idx.shape[0], n))
+    out[np.arange(idx.shape[0]), idx] = 1.0
+    return out
+
+
 def iter_max(sim_matrix: np.ndarray, max_count: int = 2,
              drop_negative: bool = False) -> np.ndarray:
     """Iterative refinement of the argmax intersection (SimAlign itermax).
@@ -44,8 +56,8 @@ def iter_max(sim_matrix: np.ndarray, max_count: int = 2,
     """
     alpha_ratio = 0.9
     m, n = sim_matrix.shape
-    forward = np.eye(n)[sim_matrix.argmax(axis=1)]  # m x n
-    backward = np.eye(m)[sim_matrix.argmax(axis=0)]  # n x m
+    forward = _onehot_rows(sim_matrix.argmax(axis=1), n)   # m x n
+    backward = _onehot_rows(sim_matrix.argmax(axis=0), m)  # n x m
     inter = forward * backward.transpose()
 
     if min(m, n) <= 2:
@@ -53,20 +65,25 @@ def iter_max(sim_matrix: np.ndarray, max_count: int = 2,
         return _keep_positive(list(zip(rows.tolist(), cols.tolist())),
                               sim_matrix, drop_negative)
 
-    new_inter = np.zeros((m, n))
     count = 1
     while count < max_count:
-        mask_x = 1.0 - np.tile(inter.sum(1)[:, np.newaxis], (1, n)).clip(0.0, 1.0)
-        mask_y = 1.0 - np.tile(inter.sum(0)[np.newaxis, :], (m, 1)).clip(0.0, 1.0)
+        # mask_x / mask_y are constant along one axis, so they are kept as a
+        # column and a row vector and expanded by broadcasting rather than tiled.
+        mask_x = 1.0 - inter.sum(1)[:, np.newaxis].clip(0.0, 1.0)  # m x 1
+        mask_y = 1.0 - inter.sum(0)[np.newaxis, :].clip(0.0, 1.0)  # 1 x n
+        if mask_x.sum() < 1.0 or mask_y.sum() < 1.0:
+            # Every row (or every column) is already aligned. The original
+            # zeroed both masks here and ran the iteration out on all-zero
+            # arrays, which yields an empty new_inter and breaks on the next
+            # equality check regardless -- so break directly.
+            break
+
         mask = ((alpha_ratio * mask_x) + (alpha_ratio * mask_y)).clip(0.0, 1.0)
         mask_zeros = 1.0 - ((1.0 - mask_x) * (1.0 - mask_y))
-        if mask_x.sum() < 1.0 or mask_y.sum() < 1.0:
-            mask *= 0.0
-            mask_zeros *= 0.0
 
         new_sim = sim_matrix * mask
-        fwd = np.eye(n)[new_sim.argmax(axis=1)] * mask_zeros
-        bac = np.eye(m)[new_sim.argmax(axis=0)].transpose() * mask_zeros
+        fwd = _onehot_rows(new_sim.argmax(axis=1), n) * mask_zeros
+        bac = _onehot_rows(new_sim.argmax(axis=0), m).transpose() * mask_zeros
         new_inter = fwd * bac
 
         if np.array_equal(inter + new_inter, inter):

@@ -38,6 +38,10 @@ def apply_mdpalign_fuzzy(similarity_matrix, token_count):
     return similarity_matrix * weights
 
 
+def _level_is_inert(n_blocks_h, n_blocks_w, width):
+    return width >= max(n_blocks_h, n_blocks_w) - 1
+
+
 def ctfalign(similarity_matrix, method, width=0, drop_negative=True):
     """Coarse-to-fine pyramid masking with lenient recovery (CTFAlign).
 
@@ -49,6 +53,8 @@ def ctfalign(similarity_matrix, method, width=0, drop_negative=True):
 
     ``method`` is ``"simalign-argmax"`` or ``"simalign-itermax"``.
     ``drop_negative`` discards pairs whose similarity is not positive.
+
+    Levels whose mask cannot remove anything are skipped; see ``_level_is_inert``.
     """
     m, n = similarity_matrix.shape
     block_h = max(m // 2, 1)
@@ -57,6 +63,13 @@ def ctfalign(similarity_matrix, method, width=0, drop_negative=True):
     while block_h >= 1 and block_w >= 1:
         n_blocks_h = (m + block_h - 1) // block_h
         n_blocks_w = (n + block_w - 1) // block_w
+        final_level = block_h == 1 and block_w == 1
+
+        # Skip levels that cannot constrain anything due to the buffer/grid size:
+        if not final_level and _level_is_inert(n_blocks_h, n_blocks_w, width):
+            block_h = max(block_h // 2, 1)
+            block_w = max(block_w // 2, 1)
+            continue
 
         if block_h == 1 and block_w == 1:
             coarse = similarity_matrix
@@ -93,12 +106,17 @@ def ctfalign(similarity_matrix, method, width=0, drop_negative=True):
             c0 = max(cj - width, 0);  c1 = min(cj + width + 1, n_blocks_w)
             coarse_mask[r0:r1, c0:c1] = 1.0
 
-        mask = F.interpolate(
-            coarse_mask[None, None],
-            size=(n_blocks_h * block_h, n_blocks_w * block_w),
-            mode='nearest'
-        ).squeeze(0, 1)[:m, :n]
-        similarity_matrix = similarity_matrix * mask
+        # An all-ones mask is an identity multiply. ``_level_is_inert`` catches
+        # the cases predictable from the grid size alone; this catches the rest,
+        # where the aligned blocks happen to spread far enough that their
+        # buffers cover the grid -- only knowable once they are computed.
+        if not bool(coarse_mask.all()):
+            mask = F.interpolate(
+                coarse_mask[None, None],
+                size=(n_blocks_h * block_h, n_blocks_w * block_w),
+                mode='nearest'
+            ).squeeze(0, 1)[:m, :n]
+            similarity_matrix = similarity_matrix * mask
 
         block_h = max(block_h // 2, 1)
         block_w = max(block_w // 2, 1)

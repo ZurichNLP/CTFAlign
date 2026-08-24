@@ -9,6 +9,8 @@ from ctfalign import (
     to_word_alignment_label_notation,
 )
 from ctfalign.encoders import EncodedText
+from ctfalign.align import _onehot_rows, iter_max
+from ctfalign.masks import _level_is_inert, ctfalign
 
 
 def _toy_embeddings():
@@ -151,3 +153,65 @@ def test_alignment_record_carries_units():
     assert rec["units_a"] == ["a", "b"] and rec["units_b"] == ["x", "y"]
     # omitted by default, since whitespace words are recoverable from the text
     assert "units_a" not in alignment_record("ab", "xy", [(0, 0)])
+
+
+def _reference_ctfalign(sim, method, width):
+    """CTFAlign with every level run, including the ones ctfalign skips.
+
+    ``_level_is_inert`` and the all-ones check are pure efficiency shortcuts, so
+    forcing every level must give the identical alignment.
+    """
+    import ctfalign.masks as masks
+    inert, saved = masks._level_is_inert, masks._level_is_inert
+    masks._level_is_inert = lambda h, w, width: False
+    try:
+        return masks.ctfalign(sim, method, width=width)
+    finally:
+        masks._level_is_inert = saved
+
+
+def test_level_is_inert_condition():
+    assert _level_is_inert(2, 2, width=8)        # buffer spans the whole grid
+    assert _level_is_inert(9, 9, width=8)
+    assert not _level_is_inert(10, 10, width=8)  # first level that can constrain
+    assert not _level_is_inert(2, 2, width=0)    # no buffer -> never inert
+    assert _level_is_inert(3, 17, width=16)      # driven by the longer side
+
+
+def test_skipping_inert_levels_does_not_change_the_alignment():
+    torch.manual_seed(0)
+    for m, n in ((9, 9), (40, 33), (128, 96)):
+        sim = torch.randn(m, n) * 0.4
+        for width in (0, 1, 4, 8, 32):
+            for mode in ("simalign-argmax", "simalign-itermax"):
+                fast = sorted(map(tuple, ctfalign(sim, mode, width=width)))
+                full = sorted(map(tuple, _reference_ctfalign(sim, mode, width)))
+                assert fast == full, (m, n, width, mode)
+
+
+def test_onehot_rows_matches_eye_indexing():
+    """_onehot_rows replaces np.eye(n)[idx] without materialising the identity."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    for m, n in ((1, 1), (3, 7), (7, 3), (40, 40)):
+        idx = rng.integers(0, n, m)
+        assert (_onehot_rows(idx, n) == np.eye(n)[idx]).all()
+
+
+def test_itermax_early_exit_matches_running_the_iteration_out():
+    """The 'everything already aligned' break must not change the result.
+
+    A near-permutation matrix makes the first intersection cover every row and
+    column, which is exactly the branch that used to zero the masks and run the
+    iteration out on all-zero arrays.
+    """
+    import numpy as np
+    rng = np.random.default_rng(1)
+    for size in (5, 20, 60):
+        sim = rng.normal(0, 0.05, (size, size))
+        for i, j in enumerate(rng.permutation(size)):
+            sim[i, j] += 10.0
+        one_pass = sorted(map(tuple, iter_max(sim, max_count=1)))
+        many_pass = sorted(map(tuple, iter_max(sim, max_count=10)))
+        # extra iterations find nothing once everything is aligned
+        assert one_pass == many_pass

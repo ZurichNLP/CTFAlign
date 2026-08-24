@@ -36,7 +36,7 @@ def add_soft_belt_mask_token_count_fixed_on_longer_side(similarity_matrix, token
     return similarity_matrix * weights
 
 
-def pyramid_hard_lenient2(similarity_matrix, method, width=0):
+def pyramid_hard_lenient2(similarity_matrix, method, width=0, drop_negative=True):
     """Coarse-to-fine pyramid masking with lenient recovery (CTFAlign).
 
     Starts from a 2x2 grid and halves the block size each level. Aligned coarse
@@ -46,6 +46,8 @@ def pyramid_hard_lenient2(similarity_matrix, method, width=0):
     finest (1x1) level.
 
     ``method`` is ``"simalign-argmax"`` or ``"simalign-itermax"``.
+    ``drop_negative`` discards pairs whose similarity is not strictly positive
+    at every level.
     """
     m, n = similarity_matrix.shape
     block_h = max(m // 2, 1)
@@ -55,18 +57,22 @@ def pyramid_hard_lenient2(similarity_matrix, method, width=0):
         n_blocks_h = (m + block_h - 1) // block_h
         n_blocks_w = (n + block_w - 1) // block_w
 
-        coarse = F.avg_pool2d(
-            similarity_matrix[None, None],
-            kernel_size=(block_h, block_w),
-            stride=(block_h, block_w),
-            ceil_mode=True,
-            count_include_pad=False,
-        ).squeeze(0, 1)
+        if block_h == 1 and block_w == 1:
+            coarse = similarity_matrix
+        else:
+            coarse = F.avg_pool2d(
+                similarity_matrix[None, None].clamp(min=0),
+                kernel_size=(block_h, block_w),
+                stride=(block_h, block_w),
+                ceil_mode=True,
+                count_include_pad=False,
+            ).squeeze(0, 1)
 
         if method == 'simalign-argmax':
-            coarse_alignment = argmax_align(coarse)
+            coarse_alignment = argmax_align(coarse, drop_negative=drop_negative)
         elif method == 'simalign-itermax':
-            coarse_alignment = iter_max(coarse.cpu().numpy())
+            coarse_alignment = iter_max(coarse.cpu().numpy(),
+                                        drop_negative=drop_negative)
         else:
             raise NotImplementedError("Method not implemented for pyramid_hard_lenient2.")
 
@@ -79,8 +85,6 @@ def pyramid_hard_lenient2(similarity_matrix, method, width=0):
             c0 = max(cj - width, 0);  c1 = min(cj + width + 1, n_blocks_w)
             coarse_mask[r0:r1, c0:c1] = 1.0
 
-        # Lenient recovery: for each (r, c) at the intersection of an empty row
-        # and an empty column, apply the same +/-width buffer as normal blocks.
         empty_rows = coarse_mask.sum(dim=1) == 0
         empty_cols = coarse_mask.sum(dim=0) == 0
         for ci, cj in (empty_rows[:, None] & empty_cols[None, :]).nonzero(as_tuple=False).tolist():

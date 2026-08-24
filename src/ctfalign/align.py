@@ -4,11 +4,16 @@ Both functions operate on a single token-level similarity matrix and return a
 list of ``(src_token_idx, tgt_token_idx)`` pairs over the *non-special* token
 sequence. They are framework-independent: ``argmax_align`` takes a torch tensor,
 ``iter_max`` takes a numpy array (matching the SimAlign reference).
+
+Both accept ``drop_negative``: when set, pairs whose similarity is not strictly
+positive are discarded. A negative cosine similarity means the two token
+embeddings point in opposite directions, so it should never license an
+alignment -- even when it happens to be the row/column maximum.
 """
 import numpy as np
 
 
-def argmax_align(similarity_matrix):
+def argmax_align(similarity_matrix, drop_negative=False):
     """Greedy bidirectional argmax, intersected (SimAlign argmax)."""
     en_cz = similarity_matrix.argmax(dim=1)
     cz_en = similarity_matrix.argmax(dim=0)
@@ -17,11 +22,21 @@ def argmax_align(similarity_matrix):
     for i, j in enumerate(en_cz):
         j = j.item()
         if cz_en[j] == i:
+            if drop_negative and float(similarity_matrix[i, j]) <= 0:
+                continue
             intersection.append((i, j))
     return intersection
 
 
-def iter_max(sim_matrix: np.ndarray, max_count: int = 2) -> np.ndarray:
+def _keep_positive(pairs, matrix, drop_negative):
+    """Drop pairs whose similarity is not strictly positive (see argmax_align)."""
+    if not drop_negative:
+        return pairs
+    return [(i, j) for i, j in pairs if float(matrix[i, j]) > 0]
+
+
+def iter_max(sim_matrix: np.ndarray, max_count: int = 2,
+             drop_negative: bool = False) -> np.ndarray:
     """Iterative refinement of the argmax intersection (SimAlign itermax).
 
     ``max_count`` controls the number of iterations; higher means more recall.
@@ -35,7 +50,8 @@ def iter_max(sim_matrix: np.ndarray, max_count: int = 2) -> np.ndarray:
 
     if min(m, n) <= 2:
         rows, cols = np.where(inter > 0)
-        return list(zip(rows.tolist(), cols.tolist()))
+        return _keep_positive(list(zip(rows.tolist(), cols.tolist())),
+                              sim_matrix, drop_negative)
 
     new_inter = np.zeros((m, n))
     count = 1
@@ -58,4 +74,5 @@ def iter_max(sim_matrix: np.ndarray, max_count: int = 2) -> np.ndarray:
         inter = inter + new_inter
         count += 1
     rows, cols = np.where(inter > 0)
-    return list(zip(rows.tolist(), cols.tolist()))
+    return _keep_positive(list(zip(rows.tolist(), cols.tolist())),
+                          sim_matrix, drop_negative)

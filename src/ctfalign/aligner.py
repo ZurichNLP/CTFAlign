@@ -52,15 +52,16 @@ def align_from_similarity(sim, word_ids_a, word_ids_b,
     """Align a pre-computed token similarity matrix to word-level pairs.
 
     sim             : ``(n_tokens_a, n_tokens_b)`` similarity matrix (array-like).
-                      Negative entries are clamped to 0 before masking, matching
-                      the research pipeline.
+                      Used as-is: negative entries stay negative (they are
+                      clamped only within a pooled CTFAlign block, see
+                      ``masks.py``) and never license an alignment.
     word_ids_a / b  : per-token whitespace-word indices (b2w maps).
     Returns a sorted list of ``(word_idx_a, word_idx_b)`` pairs.
     """
     method = _normalize_method(method)
     k = resolve_k(method, k)
 
-    sim = torch.as_tensor(sim, dtype=torch.float32).clamp(min=0)
+    sim = torch.as_tensor(sim, dtype=torch.float32)
 
     if method == "mdpalign-strict":
         sim = add_belt_mask_token_count_fixed_on_longer_side(sim, k)
@@ -70,9 +71,10 @@ def align_from_similarity(sim, word_ids_a, word_ids_b,
     if method == "ctfalign":
         token_alignment = pyramid_hard_lenient2(sim, f"simalign-{mode}", width=int(k))
     elif mode == "argmax":
-        token_alignment = argmax_align(sim)
+        token_alignment = argmax_align(sim, drop_negative=True)
     elif mode == "itermax":
-        token_alignment = iter_max(sim.numpy(), max_count=max_count)
+        token_alignment = iter_max(sim.numpy(), max_count=max_count,
+                                   drop_negative=True)
     else:
         raise ValueError(f"Unknown mode {mode!r}; use 'argmax' or 'itermax'.")
 

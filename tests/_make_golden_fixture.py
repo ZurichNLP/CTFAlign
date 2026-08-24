@@ -14,8 +14,9 @@ frozen reference even after get_predictions.py changes (a live-import comparison
 would be circular once that script imports the package).
 
 The reference is computed through the research functions in the exact order
-get_predictions.py's main() applies them: clamp(min=0) -> belt mask -> extractor
-(CTFAlign bypasses the belt) -> word projection.
+get_predictions.py's main() applies them: belt mask -> extractor (CTFAlign
+bypasses the belt) -> word projection. The matrix is passed through unclamped;
+negatives are clamped only inside a pooled CTFAlign block.
 """
 import argparse
 import importlib.util
@@ -66,18 +67,18 @@ def load_source(research_repo):
 
 def reference(gp, tok, sim, b2w_a, b2w_b, method, mask, k):
     """One case for one row, via the research functions in main()'s order."""
-    sm = torch.tensor(sim).clamp(min=0)
+    sm = torch.tensor(sim)
     if mask == "mdpalign_strict":
         sm = gp.apply_mdpalign_strict(sm, k)
     elif mask == "mdpalign_fuzzy":
         sm = gp.apply_mdpalign_fuzzy(sm, k)
 
     if mask == "ctfalign":
-        ta = gp.ctfalign(sm, method, width=int(k))
+        ta = gp.ctfalign(sm, method, width=int(k), drop_negative=True)
     elif method == "simalign-argmax":
-        ta = gp.argmax_align(sm)
+        ta = gp.argmax_align(sm, drop_negative=True)
     else:
-        ta = gp.iter_max(sm.numpy(), max_count=2)
+        ta = gp.iter_max(sm.numpy(), max_count=2, drop_negative=True)
 
     return gp.get_word_align_from_tok_align(tok, ta, b2w_a, b2w_b, 0, 0)
 

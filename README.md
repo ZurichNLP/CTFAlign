@@ -1,7 +1,7 @@
 # CTFAlign: Document-level Word Alignment
 
 [![Paper](https://img.shields.io/badge/Paper-B31B1B.svg)](https://arxiv.org/abs/2608.21023)
-[![Experimental Code](https://img.shields.io/badge/Experimental%20Code-6A5ACD.svg)](https://github.com/ZurichNLP/document-level-word-alignment)
+[![Experiment Code](https://img.shields.io/badge/Experiment%20Code-6A5ACD.svg)](https://github.com/ZurichNLP/document-level-word-alignment)
 [![Demo](https://img.shields.io/badge/Demo-4C8BF5.svg)](https://huggingface.co/spaces/miwytt/ctfalign)
 
 CTFAlign provides training-free word alignment for parallel documents, without requiring sentence-level segmentation or alignment. It extends embedding-based word alignment to long documents by constraining the alignment search space.

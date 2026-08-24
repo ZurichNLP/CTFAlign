@@ -24,14 +24,14 @@ The package implements two methods from [*Scaling Unsupervised Word Alignment to
 Requires Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/ZurichNLP/CTFAlign.git
-cd CTFAlign
-pip install .
+pip install ctfalign
 ```
 
-For development, install in editable mode:
+For development, clone the repository and install in editable mode:
 
 ```bash
+git clone https://github.com/ZurichNLP/CTFAlign.git
+cd CTFAlign
 pip install -e ".[dev]"
 ```
 

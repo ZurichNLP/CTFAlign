@@ -207,6 +207,9 @@ For full experiment code and test data see https://github.com/ZurichNLP/document
 
 Find a more interactive demo here: https://huggingface.co/spaces/miwytt/ctfalign
 
+## News
+* [*Scaling Unsupervised Word Alignment to Documents via Structural Constraints*](https://arxiv.org/abs/2608.21023) got accepted to EMNLP 2026 Main! 🎉
+
 ## Citation
 
 ```

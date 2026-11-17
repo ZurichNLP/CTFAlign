@@ -42,6 +42,11 @@ def _level_is_inert(n_blocks_h, n_blocks_w, width):
     return width >= max(n_blocks_h, n_blocks_w) - 1
 
 
+def _dilate(flags, width):
+    """True wherever a True lies within ``width`` positions."""
+    return F.max_pool1d(flags[None, None].float(), 2 * width + 1, stride=1, padding=width)[0, 0].bool()
+
+
 def ctfalign(similarity_matrix, method, width=0, drop_negative=True):
     """Coarse-to-fine pyramid masking with lenient recovery (CTFAlign).
 
@@ -101,10 +106,12 @@ def ctfalign(similarity_matrix, method, width=0, drop_negative=True):
 
         empty_rows = coarse_mask.sum(dim=1) == 0
         empty_cols = coarse_mask.sum(dim=0) == 0
-        for ci, cj in (empty_rows[:, None] & empty_cols[None, :]).nonzero(as_tuple=False).tolist():
-            r0 = max(ci - width, 0);  r1 = min(ci + width + 1, n_blocks_h)
-            c0 = max(cj - width, 0);  c1 = min(cj + width + 1, n_blocks_w)
-            coarse_mask[r0:r1, c0:c1] = 1.0
+        # The buffered (empty row, empty column) blocks form a cross product, so
+        # set them at once: a per-pair loop takes minutes on poorly aligned
+        # documents, where most rows and columns are empty.
+        recover_rows = _dilate(empty_rows, width)
+        recover_cols = _dilate(empty_cols, width)
+        coarse_mask[recover_rows[:, None] & recover_cols[None, :]] = 1.0
 
         # An all-ones mask is an identity multiply. ``_level_is_inert`` catches
         # the cases predictable from the grid size alone; this catches the rest,

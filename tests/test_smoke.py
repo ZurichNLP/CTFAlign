@@ -10,7 +10,7 @@ from ctfalign import (
 )
 from ctfalign.encoders import EncodedText
 from ctfalign.align import _onehot_rows, iter_max
-from ctfalign.masks import _level_is_inert, ctfalign
+from ctfalign.masks import _dilate, _level_is_inert, ctfalign
 
 
 def _toy_embeddings():
@@ -215,3 +215,13 @@ def test_itermax_early_exit_matches_running_the_iteration_out():
         many_pass = sorted(map(tuple, iter_max(sim, max_count=10)))
         # extra iterations find nothing once everything is aligned
         assert one_pass == many_pass
+
+
+def test_dilate_matches_window_loop():
+    torch.manual_seed(0)
+    for width in (0, 1, 3):
+        flags = torch.rand(20) < 0.2
+        expected = torch.zeros(20, dtype=torch.bool)
+        for i in flags.nonzero().flatten().tolist():
+            expected[max(i - width, 0):i + width + 1] = True
+        assert torch.equal(_dilate(flags, width), expected)
